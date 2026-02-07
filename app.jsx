@@ -64,6 +64,41 @@ const ProgressBar = ({ value, max, color, label }) => (
   </div>
 );
 
+function NavBtn({ active, icon: Icon, label, onClick }) {
+  return (
+    <button onClick={onClick} className={`flex flex-col items-center gap-1 p-2 transition-all ${active ? 'text-white' : 'text-gray-500'}`}>
+      <Icon size={18} />
+      <span className="text-[9px] uppercase font-black tracking-widest">{label}</span>
+      {active && <div className="w-1 h-1 bg-white rounded-full mt-0.5" />}
+    </button>
+  );
+}
+
+function CreationView({ onStart }) {
+  const [name, setName] = useState('');
+  const [selectedClass, setSelectedClass] = useState('WARRIOR');
+  return (
+    <div className="min-h-screen bg-black text-white font-mono flex flex-col items-center justify-center p-6 max-w-2xl mx-auto">
+      <div className="w-full space-y-8 animate-in fade-in duration-700 text-center">
+        <header className="space-y-2">
+          <h1 className="text-4xl font-black italic tracking-tighter uppercase leading-none">Habit RPG</h1>
+          <p className="text-gray-500 text-xs uppercase tracking-widest">Character Initiation Phase</p>
+        </header>
+        <input type="text" placeholder="ENTER NAME..." value={name} onChange={e => setName(e.target.value.toUpperCase())} className="w-full bg-gray-900 border-2 border-gray-800 p-4 text-xl focus:outline-none focus:border-red-500 transition-all uppercase placeholder-gray-700" />
+        <div className="grid grid-cols-1 gap-3">
+          {Object.values(CLASSES).map((cls) => (
+            <button key={cls.id} onClick={() => setSelectedClass(cls.id)} className={`flex items-center gap-4 p-4 rounded-xl border-2 transition-all text-left ${selectedClass === cls.id ? 'border-red-500 bg-red-900/10' : 'border-gray-800 bg-gray-900 opacity-60'}`}>
+              <div className={`p-3 rounded-lg bg-gray-800 ${selectedClass === cls.id ? cls.color : ''}`}><cls.icon size={24} /></div>
+              <h3 className="font-bold uppercase tracking-wide">{cls.name}</h3>
+            </button>
+          ))}
+        </div>
+        <button onClick={() => name && onStart(name, selectedClass)} disabled={!name} className="w-full py-5 bg-white text-black font-black uppercase text-xl hover:bg-gray-200 transition-all disabled:opacity-20 flex items-center justify-center gap-3">Begin Journey <Sword size={24} /></button>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [gameState, setGameState] = useState('CREATION'); 
   const [user, setUser] = useState({
@@ -434,41 +469,6 @@ export default function App() {
         <NavBtn active={gameState === 'GUILD' || gameState === 'GUILD_DETAIL'} icon={Users} label="Guild" onClick={() => setGameState('GUILD')} />
         <NavBtn active={gameState === 'META'} icon={Settings} label="Meta" onClick={() => setGameState('META')} />
       </nav>
-    </div>
-  );
-}
-
-function NavBtn({ active, icon: Icon, label, onClick }) {
-  return (
-    <button onClick={onClick} className={`flex flex-col items-center gap-1 p-2 transition-all ${active ? 'text-white' : 'text-gray-500'}`}>
-      <Icon size={18} />
-      <span className="text-[9px] uppercase font-black tracking-widest">{label}</span>
-      {active && <div className="w-1 h-1 bg-white rounded-full mt-0.5" />}
-    </button>
-  );
-}
-
-function CreationView({ onStart }) {
-  const [name, setName] = useState('');
-  const [selectedClass, setSelectedClass] = useState('WARRIOR');
-  return (
-    <div className="min-h-screen bg-black text-white font-mono flex flex-col items-center justify-center p-6 max-w-2xl mx-auto">
-      <div className="w-full space-y-8 animate-in fade-in duration-700 text-center">
-        <header className="space-y-2">
-          <h1 className="text-4xl font-black italic tracking-tighter uppercase leading-none">Habit RPG</h1>
-          <p className="text-gray-500 text-xs uppercase tracking-widest">Character Initiation Phase</p>
-        </header>
-        <input type="text" placeholder="ENTER NAME..." value={name} onChange={e => setName(e.target.value.toUpperCase())} className="w-full bg-gray-900 border-2 border-gray-800 p-4 text-xl focus:outline-none focus:border-red-500 transition-all uppercase placeholder-gray-700" />
-        <div className="grid grid-cols-1 gap-3">
-          {Object.values(CLASSES).map((cls) => (
-            <button key={cls.id} onClick={() => setSelectedClass(cls.id)} className={`flex items-center gap-4 p-4 rounded-xl border-2 transition-all text-left ${selectedClass === cls.id ? 'border-red-500 bg-red-900/10' : 'border-gray-800 bg-gray-900 opacity-60'}`}>
-              <div className={`p-3 rounded-lg bg-gray-800 ${selectedClass === cls.id ? cls.color : ''}`}><cls.icon size={24} /></div>
-              <h3 className="font-bold uppercase tracking-wide">{cls.name}</h3>
-            </button>
-          ))}
-        </div>
-        <button onClick={() => name && onStart(name, selectedClass)} disabled={!name} className="w-full py-5 bg-white text-black font-black uppercase text-xl hover:bg-gray-200 transition-all disabled:opacity-20 flex items-center justify-center gap-3">Begin Journey <Sword size={24} /></button>
-      </div>
     </div>
   );
 }
