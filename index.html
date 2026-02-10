@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Habit RPG | Focus & Conquer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css"/>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;700;900&family=Space+Mono:wght@400;700&display=swap');
+        :root { --bg-dark: #0a0a0c; }
+        body { background-color: var(--bg-dark); color: #e2e8f0; font-family: 'Outfit', sans-serif; user-select: none; overflow-x: hidden; }
+        .mono { font-family: 'Space Mono', monospace; }
+        .stat-card { background: linear-gradient(145deg, #16161a, #0f0f12); border: 1px solid #27272a; }
+        .item-slot { width: 50px; height: 50px; background: #111114; border: 2px solid #27272a; display: flex; align-items: center; justify-content: center; cursor: pointer; border-radius: 12px; }
+        .equip-slot { width: 60px; height: 60px; background: #1a1a1e; border: 2px dashed #3f3f46; border-radius: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 20px; transition: all 0.3s; }
+        .item-rarity-common { border-color: #3f3f46; }
+        .item-rarity-uncommon { border-color: #22c55e; }
+        .item-rarity-rare { border-color: #3b82f6; }
+        .item-rarity-epic { border-color: #a855f7; }
+        .xp-bar-fill { transition: width 0.6s cubic-bezier(0.34, 1.56, 0.64, 1); }
+        .tab-active { color: white; border-bottom: 2px solid #ef4444; }
+        .modal-bg { backdrop-filter: blur(12px); background: rgba(0,0,0,0.9); }
+        
+        /* Combat Animation */
+        .combat-sway { animation: sway 3s ease-in-out infinite; }
+        @keyframes sway { 0%, 100% { transform: translateY(0) rotate(0deg); } 50% { transform: translateY(-10px) rotate(2deg); } }
+        
+        .weapon-swing { animation: swing 0.5s ease-in-out infinite alternate; }
+        @keyframes swing { from { transform: rotate(-20deg); } to { transform: rotate(40deg); } }
+
+        button:disabled { opacity: 0.3; cursor: not-allowed; }
+    </style>
+</head>
+<body class="max-w-md mx-auto min-h-screen flex flex-col border-x border-zinc-800 shadow-2xl pb-24">
+
+    <!-- HUD -->
+    <header id="hud" class="hidden p-4 bg-zinc-950/90 backdrop-blur-md sticky top-0 z-40 border-b border-zinc-800">
+        <div class="flex justify-between items-center mb-4">
+            <div class="flex items-center gap-3">
+                <div id="hud-avatar" class="w-12 h-12 bg-zinc-900 border-2 border-zinc-700 rounded-xl flex items-center justify-center text-2xl">⚔️</div>
+                <div>
+                    <h2 id="hud-name" class="font-black text-lg leading-none italic uppercase">Hero</h2>
+                    <div class="flex items-center gap-2 mt-1">
+                        <span class="bg-red-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded">LVL <span id="hud-level">1</span></span>
+                        <span id="hud-class" class="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">WARRIOR</span>
+                    </div>
+                </div>
+            </div>
+            <div class="text-right">
+                <div id="hud-gold" class="text-yellow-500 font-bold text-xl">0G</div>
+                <div class="w-24 h-1.5 bg-zinc-900 rounded-full mt-1 overflow-hidden border border-zinc-800">
+                    <div id="hud-xp-bar" class="xp-bar-fill h-full bg-blue-500" style="width: 0%"></div>
+                </div>
+            </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+            <div class="space-y-1">
+                <div class="flex justify-between text-[8px] font-black uppercase text-zinc-500"><span>HP</span><span id="txt-hp">100/100</span></div>
+                <div class="h-1.5 bg-zinc-900 rounded-full overflow-hidden"><div id="bar-hp" class="h-full bg-red-600 transition-all duration-300" style="width: 100%"></div></div>
+            </div>
+            <div class="space-y-1">
+                <div class="flex justify-between text-[8px] font-black uppercase text-zinc-500"><span>MP</span><span id="txt-mp">50/50</span></div>
+                <div class="h-1.5 bg-zinc-900 rounded-full overflow-hidden"><div id="bar-mp" class="h-full bg-blue-600 transition-all duration-300" style="width: 100%"></div></div>
+            </div>
+        </div>
+    </header>
+
+    <main id="main-content" class="hidden p-4 flex-1">
+        <!-- BATTLE VIEW -->
+        <div id="view-battle" class="space-y-6">
+            <section>
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">Active Quests</h3>
+                </div>
+                <div id="quest-list" class="space-y-3"></div>
+            </section>
+            <section>
+                <h3 class="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500 mb-4">Available Dungeons</h3>
+                <div id="dungeon-list" class="space-y-3"></div>
+            </section>
+        </div>
+
+        <!-- HERO VIEW -->
+        <div id="view-hero" class="hidden space-y-6">
+            <!-- Equipment -->
+            <div class="flex justify-center gap-6 py-6 bg-zinc-900/50 rounded-3xl border border-zinc-800">
+                <div class="flex flex-col items-center gap-2">
+                    <div onclick="openEquipDetail('weapon')" id="eq-weapon" class="equip-slot hover:border-red-500">🗡️</div>
+                    <span class="text-[8px] font-black text-zinc-500 uppercase">Weapon</span>
+                </div>
+                <div class="flex flex-col items-center gap-2">
+                    <div onclick="openEquipDetail('armor')" id="eq-armor" class="equip-slot hover:border-blue-500">🛡️</div>
+                    <span class="text-[8px] font-black text-zinc-500 uppercase">Armor</span>
+                </div>
+            </div>
+
+            <!-- Stats -->
+            <div class="grid grid-cols-4 gap-2">
+                <div class="stat-card p-2 rounded-xl text-center">
+                    <div class="text-[8px] text-zinc-500 uppercase font-black">STR</div>
+                    <div id="val-str" class="text-xl font-black">10</div>
+                    <button onclick="upgradeStat('str')" class="stat-up-btn hidden w-full mt-1 bg-white text-black text-[8px] font-black rounded uppercase py-1">Up</button>
+                </div>
+                <div class="stat-card p-2 rounded-xl text-center">
+                    <div class="text-[8px] text-zinc-500 uppercase font-black">FOC</div>
+                    <div id="val-foc" class="text-xl font-black">10</div>
+                    <button onclick="upgradeStat('foc')" class="stat-up-btn hidden w-full mt-1 bg-white text-black text-[8px] font-black rounded uppercase py-1">Up</button>
+                </div>
+                <div class="stat-card p-2 rounded-xl text-center">
+                    <div class="text-[8px] text-zinc-500 uppercase font-black">VIT</div>
+                    <div id="val-vit" class="text-xl font-black">10</div>
+                    <button onclick="upgradeStat('vit')" class="stat-up-btn hidden w-full mt-1 bg-white text-black text-[8px] font-black rounded uppercase py-1">Up</button>
+                </div>
+                <div class="stat-card p-2 rounded-xl text-center">
+                    <div class="text-[8px] text-zinc-500 uppercase font-black">LUK</div>
+                    <div id="val-luk" class="text-xl font-black">10</div>
+                    <button onclick="upgradeStat('luk')" class="stat-up-btn hidden w-full mt-1 bg-white text-black text-[8px] font-black rounded uppercase py-1">Up</button>
+                </div>
+            </div>
+
+            <!-- Level Up Points Alert -->
+            <div id="pts-alert" class="hidden p-3 bg-red-600 rounded-xl text-center animate-pulse cursor-pointer">
+                <span id="pts-text" class="text-[10px] font-black uppercase text-white">Available Points!</span>
+            </div>
+
+            <!-- Skills -->
+            <section id="skill-section" class="hidden">
+                <div class="flex justify-between items-center mb-3">
+                    <h3 class="text-[10px] font-black uppercase text-yellow-500 tracking-widest">Mastery Skills</h3>
+                    <span class="text-[10px] font-bold text-zinc-500"><span id="val-skill-pts">0</span> Points</span>
+                </div>
+                <div id="skill-tree" class="space-y-2"></div>
+            </section>
+
+            <!-- Inventory -->
+            <section>
+                <div class="flex justify-between items-center mb-3">
+                    <h3 class="text-[10px] font-black uppercase text-zinc-500">Inventory</h3>
+                    <button onclick="sellAllScrap()" class="text-[9px] font-black text-yellow-500 uppercase">Sell All Trash</button>
+                </div>
+                <div id="inventory-grid" class="grid grid-cols-6 gap-2"></div>
+            </section>
+        </div>
+    </main>
+
+    <!-- FOCUS DUNGEON OVERLAY -->
+    <div id="screen-dungeon" class="hidden fixed inset-0 z-50 bg-black flex flex-col items-center justify-between p-12">
+        <div class="text-center">
+            <h2 id="d-name" class="font-black italic text-zinc-700 text-sm tracking-[0.4em] uppercase mb-2">Dungeon Name</h2>
+            <div id="d-timer" class="mono text-7xl font-bold tracking-tighter">00:00</div>
+        </div>
+
+        <div class="relative flex flex-col items-center combat-sway">
+            <div class="text-8xl mb-4">🌑</div>
+            <div class="absolute -bottom-4 text-4xl weapon-swing">🗡️</div>
+            <p class="mt-8 text-[10px] font-black text-zinc-600 uppercase tracking-widest animate-pulse">Engaged in Combat...</p>
+        </div>
+
+        <div class="w-full space-y-4">
+            <button onclick="triggerDungeonEnd(true)" class="w-full bg-white text-black font-black py-4 rounded-2xl uppercase text-xs shadow-xl active:scale-95 transition-all">Instant Victory (Test Mode)</button>
+            <button onclick="retreatDungeon()" class="w-full text-zinc-700 text-[10px] font-black uppercase py-2">Retreat (Lose Loot)</button>
+        </div>
+    </div>
+
+    <!-- REWARD SUMMARY MODAL -->
+    <div id="reward-modal" class="hidden fixed inset-0 z-[110] modal-bg flex items-center justify-center p-6">
+        <div class="bg-zinc-900 border-2 border-zinc-700 w-full max-w-sm rounded-3xl p-8 text-center animate__animated animate__zoomIn">
+            <h2 class="text-3xl font-black italic uppercase mb-6">Victory!</h2>
+            <div class="space-y-4 mb-8 text-left border-y border-zinc-800 py-6">
+                <div class="flex justify-between items-center">
+                    <span class="text-[10px] font-black uppercase text-zinc-500">Monsters Slain</span>
+                    <span id="rew-kills" class="font-bold text-white">0</span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-[10px] font-black uppercase text-zinc-500">Times Knocked Out</span>
+                    <span id="rew-deaths" class="font-bold text-white">0</span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-[10px] font-black uppercase text-zinc-500">Gold Plundered</span>
+                    <span id="rew-gold" class="font-bold text-yellow-500">0G</span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-[10px] font-black uppercase text-zinc-500">Exp Earned</span>
+                    <span id="rew-xp" class="font-bold text-blue-500">0</span>
+                </div>
+                <div>
+                    <span class="text-[10px] font-black uppercase text-zinc-500 mb-2 block">Loot Recovered</span>
+                    <div id="rew-items" class="flex flex-wrap gap-2"></div>
+                </div>
+            </div>
+            <button onclick="closeRewardModal()" class="w-full bg-red-600 text-white font-black py-4 rounded-2xl uppercase text-xs">Claim and Exit</button>
+        </div>
+    </div>
+
+    <!-- ITEM DETAIL MODAL -->
+    <div id="item-modal" class="hidden fixed inset-0 z-[100] modal-bg flex items-center justify-center p-6">
+        <div class="bg-zinc-900 border-2 border-zinc-800 w-full max-w-sm rounded-3xl p-6 text-center shadow-2xl">
+            <div id="itm-icon" class="text-6xl mb-4"></div>
+            <h2 id="itm-name" class="text-2xl font-black italic uppercase mb-1">Item Name</h2>
+            <p id="itm-rarity" class="text-[10px] font-black uppercase tracking-widest mb-4">Common</p>
+            <div id="itm-stats" class="mb-4 text-green-500 font-bold text-sm"></div>
+            <p id="itm-desc" class="text-xs text-zinc-500 mb-8 px-4 leading-relaxed italic">Description.</p>
+            <div class="flex flex-col gap-2">
+                <button id="itm-action" class="w-full bg-white text-black font-black py-4 rounded-xl uppercase text-xs">Action</button>
+                <button id="itm-sell" class="w-full bg-zinc-800 text-yellow-500 font-black py-4 rounded-xl uppercase text-xs border border-yellow-900/30">Sell Item</button>
+            </div>
+            <button onclick="toggleModal('item-modal')" class="mt-4 text-zinc-600 text-[10px] font-black uppercase p-2">Close</button>
+        </div>
+    </div>
+
+    <!-- START SCREEN -->
+    <div id="screen-start" class="fixed inset-0 z-[60] bg-zinc-950 flex flex-col items-center justify-center p-8 text-center space-y-12">
+        <div class="space-y-2">
+            <h1 class="text-6xl font-black italic tracking-tighter text-white">HABIT<span class="text-red-600">RPG</span></h1>
+            <p class="text-zinc-500 text-xs tracking-[0.4em] uppercase">Forged in Focus</p>
+        </div>
+        <div class="w-full space-y-4 max-w-xs">
+            <input type="text" id="init-name" placeholder="HERO NAME" class="w-full bg-zinc-900 border-2 border-zinc-800 p-4 rounded-xl text-center font-bold outline-none focus:border-red-600 uppercase text-white">
+            <div class="grid grid-cols-3 gap-2">
+                <button onclick="selCls('WARRIOR')" id="sc-WARRIOR" class="p-3 bg-zinc-900 border border-zinc-800 rounded-xl text-[10px] font-black uppercase">Warrior</button>
+                <button onclick="selCls('MAGE')" id="sc-MAGE" class="p-3 bg-zinc-900 border border-zinc-800 rounded-xl text-[10px] font-black uppercase">Mage</button>
+                <button onclick="selCls('ROGUE')" id="sc-ROGUE" class="p-3 bg-zinc-900 border border-zinc-800 rounded-xl text-[10px] font-black uppercase">Rogue</button>
+            </div>
+            <button onclick="startGame()" class="w-full bg-red-600 py-5 rounded-2xl font-black uppercase text-white shadow-xl shadow-red-900/20">Enter the Dungeon</button>
+        </div>
+    </div>
+
+    <!-- NAVIGATION -->
+    <nav id="nav" class="hidden fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-zinc-950/90 backdrop-blur-md border-t border-zinc-800 p-2 flex justify-around z-40">
+        <button onclick="showView('battle')" id="nb" class="flex flex-col items-center p-2 text-zinc-500 tab-active"><span class="text-xl">⚔️</span><span class="text-[8px] font-black uppercase">Focus</span></button>
+        <button onclick="showView('hero')" id="nh" class="flex flex-col items-center p-2 text-zinc-500"><span class="text-xl">🛡️</span><span class="text-[8px] font-black uppercase">Hero</span></button>
+    </nav>
+
+    <script>
+        // --- DATA ---
+        const ITEMS_DB = {
+            'sc_1': { name: 'Rusty Nail', icon: '🔩', type: 'scrap', value: 3, rarity: 'common', desc: 'Used for nothing but selling.' },
+            'sc_2': { name: 'Broken Gear', icon: '⚙️', type: 'scrap', value: 8, rarity: 'common', desc: 'Mechanical waste.' },
+            'sc_3': { name: 'Rat Tail', icon: '🐀', type: 'scrap', value: 5, rarity: 'common', desc: 'Disgusting dungeon scrap.' },
+            'wp_1': { name: 'Iron Dirk', icon: '🗡️', type: 'weapon', bonus: { str: 5 }, value: 50, rarity: 'uncommon', desc: 'A basic iron blade.' },
+            'wp_2': { name: 'Force Staff', icon: '🪄', type: 'weapon', bonus: { foc: 10 }, value: 120, rarity: 'rare', desc: 'Vibrates with energy.' },
+            'ar_1': { name: 'Leather Tunic', icon: '👕', type: 'armor', bonus: { vit: 8 }, value: 75, rarity: 'uncommon', desc: 'Sturdy leather protection.' },
+            'ar_2': { name: 'Plate Vest', icon: '🛡️', type: 'armor', bonus: { vit: 20 }, value: 300, rarity: 'rare', desc: 'Heavy steel plating.' }
+        };
+
+        const SKILLS_DB = {
+            'gold': { name: 'Midas Touch', desc: 'Gold drop bonus', pts: [1, 2, 4], val: [20, 50, 100], unit: '%' },
+            'regen': { name: 'Second Wind', desc: 'Health regen on kill', pts: [1, 3, 5], val: [2, 5, 10], unit: ' HP' },
+            'luck': { name: 'Fortune', desc: 'Rarity drop rate bonus', pts: [2, 4, 8], val: [10, 25, 50], unit: '%' }
+        };
+
+        const MOBS_DB = [
+            { name: 'Lazy Slime', icon: '🟢', hp: 30, dmg: 4, gold: 5 },
+            { name: 'Deadline Wraith', icon: '👻', hp: 60, dmg: 8, gold: 12 },
+            { name: 'Task Overlord', icon: '👹', hp: 150, dmg: 15, gold: 35 }
+        ];
+
+        const DUNGEONS_DB = [
+            { id: 'v', name: 'The Vents', time: 5, xp: 20, color: 'bg-zinc-800' },
+            { id: 'l', name: 'Grand Library', time: 25, xp: 100, color: 'bg-blue-900' },
+            { id: 'a', name: 'Blood Arena', time: 60, xp: 400, color: 'bg-red-900' }
+        ];
+
+        // --- STATE ---
+        let player = {
+            name: '', class: 'WARRIOR', level: 1, xp: 0, nxt: 100, gold: 50,
+            hp: 100, mHp: 100, mp: 50, mMp: 50,
+            statPts: 0, skillPts: 0,
+            stats: { str: 10, foc: 10, vit: 10, luk: 10 },
+            skills: { gold: 0, regen: 0, luck: 0 },
+            inv: [], eq: { weapon: null, armor: null },
+            quests: [{ id: 1, text: 'Clean Workspace', done: false }]
+        };
+
+        let activeSession = {
+            timer: null,
+            timeLeft: 0,
+            data: null,
+            kills: 0,
+            deaths: 0,
+            goldEarned: 0,
+            loot: []
+        };
+
+        let tempMob = null;
+
+        // --- CORE FUNCTIONS ---
+        function selCls(c) {
+            player.class = c;
+            ['WARRIOR', 'MAGE', 'ROGUE'].forEach(k => {
+                const el = document.getElementById('sc-'+k);
+                if(el) el.className = k==c ? 'p-3 bg-red-600 text-white rounded-xl text-[10px] font-black uppercase' : 'p-3 bg-zinc-900 text-zinc-600 rounded-xl text-[10px] font-black uppercase';
+            });
+        }
+
+        function startGame() {
+            const n = document.getElementById('init-name').value;
+            if(!n) return;
+            player.name = n.toUpperCase();
+            if(player.class=='WARRIOR'){ player.stats.str+=5; player.stats.vit+=5; }
+            if(player.class=='MAGE'){ player.stats.foc+=10; player.mMp+=50; player.mp=100; }
+            document.getElementById('screen-start').classList.add('hidden');
+            document.getElementById('hud').classList.remove('hidden');
+            document.getElementById('main-content').classList.remove('hidden');
+            document.getElementById('nav').classList.remove('hidden');
+            updateDerivedStats();
+            save(); 
+            render();
+        }
+
+        function showView(v) {
+            ['battle', 'hero'].forEach(k => {
+                const el = document.getElementById('view-'+k);
+                if(el) el.classList.add('hidden');
+            });
+            const target = document.getElementById('view-'+v);
+            if(target) target.classList.remove('hidden');
+            document.getElementById('nb').classList.toggle('tab-active', v=='battle');
+            document.getElementById('nh').classList.toggle('tab-active', v=='hero');
+            render();
+        }
+
+        function updateDerivedStats() {
+            const bVit = player.eq.armor ? (ITEMS_DB[player.eq.armor].bonus?.vit || 0) : 0;
+            const bFoc = player.eq.weapon ? (ITEMS_DB[player.eq.weapon].bonus?.foc || 0) : 0;
+            player.mHp = 100 + (player.stats.vit + bVit) * 10;
+            player.mMp = 50 + (player.stats.foc + bFoc) * 5;
+            if(player.hp > player.mHp) player.hp = player.mHp;
+            if(player.mp > player.mMp) player.mp = player.mMp;
+        }
+
+        function render() {
+            updateDerivedStats();
+            
+            document.getElementById('hud-name').innerText = player.name;
+            document.getElementById('hud-level').innerText = player.level;
+            document.getElementById('hud-gold').innerText = player.gold + 'G';
+            document.getElementById('hud-xp-bar').style.width = (player.xp/player.nxt*100)+'%';
+            document.getElementById('txt-hp').innerText = `${Math.round(player.hp)}/${player.mHp}`;
+            document.getElementById('bar-hp').style.width = (player.hp/player.mHp*100)+'%';
+            document.getElementById('txt-mp').innerText = `${Math.round(player.mp)}/${player.mMp}`;
+            document.getElementById('bar-mp').style.width = (player.mp/player.mMp*100)+'%';
+
+            document.getElementById('val-str').innerText = player.stats.str + (player.eq.weapon ? (ITEMS_DB[player.eq.weapon].bonus?.str||0) : 0);
+            document.getElementById('val-foc').innerText = player.stats.foc + (player.eq.weapon ? (ITEMS_DB[player.eq.weapon].bonus?.foc||0) : 0);
+            document.getElementById('val-vit').innerText = player.stats.vit + (player.eq.armor ? (ITEMS_DB[player.eq.armor].bonus?.vit||0) : 0);
+            document.getElementById('val-luk').innerText = player.stats.luk;
+
+            document.getElementById('pts-alert').classList.toggle('hidden', player.statPts <= 0);
+            document.querySelectorAll('.stat-up-btn').forEach(b => b.classList.toggle('hidden', player.statPts <= 0));
+            document.getElementById('skill-section').classList.toggle('hidden', player.skillPts <= 0 && !Object.values(player.skills).some(s=>s>0));
+            document.getElementById('val-skill-pts').innerText = player.skillPts;
+
+            renderQuests();
+            renderDungeons();
+            renderInventory();
+            renderSkills();
+            renderEquip();
+        }
+
+        function renderQuests() {
+            const l = document.getElementById('quest-list');
+            l.innerHTML = '';
+            player.quests.filter(q=>!q.done).forEach(q => {
+                l.innerHTML += `<div onclick="claimQuest(${q.id})" class="p-4 bg-zinc-900 border border-zinc-800 rounded-2xl flex justify-between items-center active:scale-95 transition-all"><span class="font-bold text-sm uppercase italic">${q.text}</span><span class="text-[9px] font-black text-green-500 bg-green-500/10 px-2 py-1 rounded">COMPLETE</span></div>`;
+            });
+        }
+
+        function renderDungeons() {
+            const l = document.getElementById('dungeon-list');
+            l.innerHTML = '';
+            DUNGEONS_DB.forEach(d => {
+                l.innerHTML += `<div onclick="enterDungeon('${d.id}')" class="p-4 ${d.color} rounded-2xl flex justify-between items-center border border-white/10 active:scale-95 transition-all"><div><h4 class="font-black italic text-sm uppercase">${d.name}</h4><p class="text-[9px] font-bold opacity-50">${d.time} MINS FOCUS</p></div><span class="text-[9px] font-black uppercase bg-black/40 px-3 py-1.5 rounded-lg">Enter</span></div>`;
+            });
+        }
+
+        function renderInventory() {
+            const g = document.getElementById('inventory-grid');
+            g.innerHTML = '';
+            for(let i=0; i<18; i++) {
+                const itmId = player.inv[i];
+                if(itmId && ITEMS_DB[itmId]) {
+                    const d = ITEMS_DB[itmId];
+                    const isEq = player.eq.weapon == itmId || player.eq.armor == itmId;
+                    g.innerHTML += `<div onclick="viewItem(${i})" class="item-slot item-rarity-${d.rarity} ${isEq?'bg-zinc-700':''}"><span>${d.icon}</span></div>`;
+                } else {
+                    g.innerHTML += `<div class="item-slot opacity-10"></div>`;
+                }
+            }
+        }
+
+        function renderEquip() {
+            document.getElementById('eq-weapon').innerText = player.eq.weapon ? ITEMS_DB[player.eq.weapon].icon : '🗡️';
+            document.getElementById('eq-armor').innerText = player.eq.armor ? ITEMS_DB[player.eq.armor].icon : '🛡️';
+        }
+
+        function renderSkills() {
+            const t = document.getElementById('skill-tree');
+            t.innerHTML = '';
+            for(let k in SKILLS_DB) {
+                const s = SKILLS_DB[k];
+                const lv = player.skills[k];
+                const maxed = lv >= s.pts.length;
+                const cost = maxed ? 0 : s.pts[lv];
+                const nextVal = maxed ? 'MAX' : s.val[lv] + s.unit;
+                
+                t.innerHTML += `
+                    <div class="p-4 stat-card rounded-2xl flex justify-between items-center">
+                        <div>
+                            <div class="text-[10px] font-black uppercase text-zinc-400">${s.name} (Lv ${lv})</div>
+                            <div class="text-[9px] text-zinc-600">${s.desc} -> ${nextVal}</div>
+                        </div>
+                        <button onclick="buySkill('${k}')" class="px-3 py-1 bg-yellow-600 text-black text-[9px] font-black rounded uppercase" ${player.skillPts < cost || maxed ? 'disabled' : ''}>
+                            ${maxed ? 'MAXED' : cost + ' PT'}
+                        </button>
+                    </div>
+                `;
+            }
+        }
+
+        // --- DUNGEON SYSTEM ---
+        function enterDungeon(id) {
+            const data = DUNGEONS_DB.find(d => d.id == id);
+            activeSession = {
+                timeLeft: data.time * 60,
+                data: data,
+                kills: 0,
+                deaths: 0,
+                goldEarned: 0,
+                loot: []
+            };
+            
+            document.getElementById('screen-dungeon').classList.remove('hidden');
+            document.getElementById('d-name').innerText = data.name;
+            
+            spawnTempMob();
+            activeSession.timer = setInterval(dungeonTick, 1000);
+        }
+
+        function spawnTempMob() {
+            const m = MOBS_DB[Math.floor(Math.random() * MOBS_DB.length)];
+            tempMob = { ...m, curHp: m.hp };
+        }
+
+        function dungeonTick() {
+            activeSession.timeLeft--;
+            const m = Math.floor(activeSession.timeLeft/60);
+            const s = activeSession.timeLeft%60;
+            document.getElementById('d-timer').innerText = `${m}:${s<10?'0':''}${s}`;
+
+            // Background Logic (Invisible to user)
+            const pDmg = player.stats.str + (player.eq.weapon ? (ITEMS_DB[player.eq.weapon].bonus?.str||0) : 0);
+            tempMob.curHp -= pDmg;
+            player.hp -= tempMob.dmg;
+
+            if(tempMob.curHp <= 0) {
+                activeSession.kills++;
+                calculateLoot();
+                spawnTempMob();
+            }
+
+            if(player.hp <= 0) {
+                activeSession.deaths++;
+                player.hp = player.mHp; // Resurrection in background
+            }
+
+            if(activeSession.timeLeft <= 0) triggerDungeonEnd();
+        }
+
+        function calculateLoot() {
+            const goldMult = 1 + (player.skills.gold * 0.2);
+            const luckBonus = player.stats.luk + (player.skills.luck * 10);
+            
+            const g = Math.floor(tempMob.gold * goldMult);
+            activeSession.goldEarned += g;
+
+            const roll = Math.random() * 100;
+            if(roll + luckBonus > 75) {
+                const keys = Object.keys(ITEMS_DB);
+                let pick;
+                if(roll + luckBonus > 96) pick = keys[Math.floor(Math.random()*keys.length)]; 
+                else pick = ['sc_1','sc_2','sc_3'][Math.floor(Math.random()*3)];
+                
+                activeSession.loot.push(pick);
+            }
+
+            if(player.skills.regen > 0) {
+                player.hp = Math.min(player.mHp, player.hp + (player.skills.regen * 2));
+            }
+        }
+
+        function triggerDungeonEnd(instant = false) {
+            clearInterval(activeSession.timer);
+            
+            // If instant, we simulate some loot based on what would have happened
+            if(instant) {
+                const simulatedKills = Math.max(10, Math.floor(activeSession.timeLeft / 10)); // ~1 kill per 10s
+                for(let i=0; i<simulatedKills; i++) {
+                    spawnTempMob();
+                    activeSession.kills++;
+                    calculateLoot();
+                }
+            }
+
+            document.getElementById('screen-dungeon').classList.add('hidden');
+            showRewards();
+        }
+
+        function showRewards() {
+            document.getElementById('reward-modal').classList.remove('hidden');
+            document.getElementById('rew-kills').innerText = activeSession.kills;
+            document.getElementById('rew-deaths').innerText = activeSession.deaths;
+            document.getElementById('rew-gold').innerText = activeSession.goldEarned + 'G';
+            document.getElementById('rew-xp').innerText = activeSession.data.xp;
+            
+            const itemBox = document.getElementById('rew-items');
+            itemBox.innerHTML = '';
+            activeSession.loot.forEach(id => {
+                if(ITEMS_DB[id]) {
+                    itemBox.innerHTML += `<div class="w-8 h-8 bg-zinc-800 border border-zinc-700 rounded flex items-center justify-center text-xs" title="${ITEMS_DB[id].name}">${ITEMS_DB[id].icon}</div>`;
+                }
+            });
+        }
+
+        function closeRewardModal() {
+            // Apply actual rewards
+            player.gold += activeSession.goldEarned;
+            player.xp += activeSession.data.xp;
+            player.inv.push(...activeSession.loot);
+            if(player.inv.length > 30) player.inv.length = 30; // Max capacity
+            
+            if(player.xp >= player.nxt) levelUp();
+            
+            document.getElementById('reward-modal').classList.add('hidden');
+            player.hp = player.mHp;
+            save();
+            render();
+        }
+
+        function retreatDungeon() {
+            clearInterval(activeSession.timer);
+            document.getElementById('screen-dungeon').classList.add('hidden');
+            player.hp = player.mHp;
+            render();
+        }
+
+        // --- RPG MECHANICS ---
+        function levelUp() {
+            player.level++;
+            player.xp = 0;
+            player.nxt = Math.floor(player.nxt * 1.6);
+            player.statPts += 3;
+            player.skillPts += 1;
+        }
+
+        function buySkill(k) {
+            const s = SKILLS_DB[k];
+            const lv = player.skills[k];
+            if(lv >= s.pts.length || player.skillPts < s.pts[lv]) return;
+            player.skillPts -= s.pts[lv];
+            player.skills[k]++;
+            save(); render();
+        }
+
+        function upgradeStat(s) {
+            if(player.statPts <= 0) return;
+            player.stats[s]++;
+            player.statPts--;
+            save(); render();
+        }
+
+        function viewItem(idx) {
+            const id = player.inv[idx];
+            if(!id || !ITEMS_DB[id]) return;
+            const d = ITEMS_DB[id];
+            
+            toggleModal('item-modal');
+            document.getElementById('itm-icon').innerText = d.icon;
+            document.getElementById('itm-name').innerText = d.name;
+            document.getElementById('itm-rarity').innerText = d.rarity.toUpperCase();
+            document.getElementById('itm-desc').innerText = d.desc;
+            
+            const sBox = document.getElementById('itm-stats');
+            sBox.innerHTML = '';
+            if(d.bonus) {
+                for(let k in d.bonus) sBox.innerHTML += `<div>+${d.bonus[k]} ${k.toUpperCase()}</div>`;
+            }
+
+            const act = document.getElementById('itm-action');
+            if(d.type == 'scrap') act.classList.add('hidden');
+            else {
+                act.classList.remove('hidden');
+                const isEq = player.eq[d.type] == id;
+                act.innerText = isEq ? 'Unequip' : 'Equip Item';
+                act.onclick = () => {
+                    if(isEq) player.eq[d.type] = null;
+                    else player.eq[d.type] = id;
+                    toggleModal('item-modal'); render();
+                };
+            }
+
+            const sell = document.getElementById('itm-sell');
+            sell.innerText = `Sell for ${d.value}G`;
+            sell.onclick = () => {
+                player.gold += d.value;
+                player.inv.splice(idx, 1);
+                if(player.eq.weapon == id) player.eq.weapon = null;
+                if(player.eq.armor == id) player.eq.armor = null;
+                toggleModal('item-modal'); save(); render();
+            };
+        }
+
+        function sellAllScrap() {
+            player.inv = player.inv.filter(id => {
+                if(ITEMS_DB[id] && ITEMS_DB[id].type == 'scrap') {
+                    player.gold += ITEMS_DB[id].value;
+                    return false;
+                }
+                return true;
+            });
+            save(); render();
+        }
+
+        function claimQuest(id) {
+            const q = player.quests.find(x=>x.id==id);
+            if(!q) return;
+            q.done = true;
+            player.xp += 20;
+            player.gold += 10;
+            if(player.xp >= player.nxt) levelUp();
+            save(); render();
+        }
+
+        function toggleModal(m) { document.getElementById(m).classList.toggle('hidden'); }
+        function save() { localStorage.setItem('habit_rpg_focus_v1', JSON.stringify(player)); }
+        function load() {
+            const s = localStorage.getItem('habit_rpg_focus_v1');
+            if(s) { 
+                try {
+                    player = JSON.parse(s); 
+                    startGame(); 
+                } catch(e) { console.error("Load failed", e); }
+            }
+        }
+
+        window.onload = load;
+    </script>
+</body>
+</html>
